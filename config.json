@@ -1,0 +1,43 @@
+{
+  "vacation": {
+    "default_days": 25,
+    "payout_days": 5,
+    "policies": {
+      "intern": {
+        "can_take": false,
+        "can_payout": false
+      },
+      "manager": {
+        "can_take": true,
+        "can_payout": true,
+        "max_payout": 10
+      },
+      "vice_president": {
+        "can_take": true,
+        "can_payout": true,
+        "max_per_request": 5
+      },
+      "developer": {
+        "can_take": true,
+        "can_payout": true,
+        "max_payout": 7,
+        "max_per_request": 3
+        }
+
+    }
+  },
+  "payment": {
+    "default_hourly_rate": 50,
+    "default_monthly_salary": 5000,
+    "bonus": {
+      "salaried_percentage": 0.10,
+      "hourly_bonus_amount": 100,
+      "hourly_hours_threshold": 160,
+      "performance": {
+        "salaried": 0.05,
+        "hourly": 0.02,
+        "freelancer": 0.0
+      }
+    }
+  }
+}

@@ -18,6 +18,7 @@ class EmployeeRole(Enum):
     INTERN = "intern"
     MANAGER = "manager"
     VICE_PRESIDENT = "vice_president"
+    DEVELOPER = "developer"
 
 
 class EmployeeType(Enum):
@@ -169,13 +170,33 @@ class HourlyBonusStrategy(BonusStrategy):
         
         return bonus_amount if hours > threshold else 0
 
-
 class NoBonus(BonusStrategy):
     """Sin bonificación (para pasantes y freelancers)"""
     
     def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
         return 0
+    
+class PerformanceBonusStrategy(BonusStrategy):
+    """Bonificación adicional por desempeño"""
 
+    def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
+        config = ConfigLoader()
+        performance_rates = config.get('payment.bonus.performance')
+
+        emp_type_key = employee.employee_type.value  # salaried, hourly, freelancer
+        performance_rate = performance_rates.get(emp_type_key, 0)
+
+        return base_payment * performance_rate
+
+#Junta las clases "SalariedBonusStrategy", "HourlyBonusStrategy" y "PerformanceBonusStrategy" en una clase "CombinedBonusStrategy"
+class CombinedBonusStrategy(BonusStrategy):
+    def __init__(self, base_bonus: BonusStrategy, extra_bonus: BonusStrategy):
+        self.base_bonus = base_bonus
+        self.extra_bonus = extra_bonus
+
+    def calculate_bonus(self, employee, base_payment):
+        return self.base_bonus.calculate_bonus(employee, base_payment) + \
+               self.extra_bonus.calculate_bonus(employee, base_payment)
 
 # ==================== POLÍTICAS DE VACACIONES ====================
 
@@ -261,52 +282,91 @@ class VicePresidentVacationPolicy(VacationPolicy):
             else:
                 return "Máximo 5 días por solicitud para vicepresidentes."
 
+class DeveloperVacationPolicy(VacationPolicy):
+    """Política de vacaciones para desarrolladores"""
+
+    def can_take_vacation(self, employee: 'Employee', days: int = 1) -> bool:
+        config = ConfigLoader()
+        max_per_request = config.get('vacation.policies.developer.max_per_request')
+        return employee.vacation_days >= days and days <= max_per_request
+
+    def can_take_payout(self, employee: 'Employee', days: int) -> bool:
+        config = ConfigLoader()
+        max_payout = config.get('vacation.policies.developer.max_payout')
+        return employee.vacation_days >= days and days <= max_payout
+
+    def process_vacation(self, employee: 'Employee', payout: bool, days: int = None) -> str:
+        config = ConfigLoader()
+        if payout:
+            days = days or config.get('vacation.payout_days')
+            if self.can_take_payout(employee, days):
+                employee.vacation_days -= days
+                return f"Payout de {days} días procesado. Días restantes: {employee.vacation_days}"
+            else:
+                return f"No se puede procesar el payout. Días disponibles: {employee.vacation_days}"
+        else:
+            days = days or 1
+            if self.can_take_vacation(employee, days):
+                employee.vacation_days -= days
+                return f"Vacación de {days} días procesada. Días restantes: {employee.vacation_days}"
+            else:
+                return "No cumple con los requisitos para la solicitud de vacaciones."
 
 # ==================== FACTORY PARA EMPLEADOS ====================
 
 class EmployeeFactory:
     """Factory Method para crear empleados con sus estrategias"""
-    
+
     @staticmethod
     def create_employee(name: str, role: EmployeeRole, emp_type: EmployeeType, **kwargs) -> 'Employee':
         """Crea un empleado con las estrategias apropiadas"""
         config = ConfigLoader()
-        
+
         # Crear empleado base
         employee = Employee(
             name=name,
             role=role,
             vacation_days=config.get('vacation.default_days')
         )
-        
+
         # Asignar estrategias según el tipo
         if emp_type == EmployeeType.SALARIED:
-            employee.monthly_salary = kwargs.get('monthly_salary', 
-                                               config.get('payment.default_monthly_salary'))
-            employee.payment_strategy = SalariedPaymentStrategy()
-            employee.bonus_strategy = SalariedBonusStrategy()
-            
+            employee.monthly_salary = kwargs.get('monthly_salary', config.get('payment.default_monthly_salary'))
+            payment_strategy = SalariedPaymentStrategy()
+            base_bonus = SalariedBonusStrategy()
+            perf_bonus = PerformanceBonusStrategy()
+            bonus_strategy = CombinedBonusStrategy(base_bonus, perf_bonus)
+
         elif emp_type == EmployeeType.HOURLY:
-            employee.hourly_rate = kwargs.get('hourly_rate', 
-                                            config.get('payment.default_hourly_rate'))
+            employee.hourly_rate = kwargs.get('hourly_rate', config.get('payment.default_hourly_rate'))
             employee.hours_worked = kwargs.get('hours_worked', 0)
-            employee.payment_strategy = HourlyPaymentStrategy()
-            employee.bonus_strategy = HourlyBonusStrategy()
-            
+            payment_strategy = HourlyPaymentStrategy()
+            base_bonus = HourlyBonusStrategy()
+            perf_bonus = PerformanceBonusStrategy()
+            bonus_strategy = CombinedBonusStrategy(base_bonus, perf_bonus)
+
         elif emp_type == EmployeeType.FREELANCER:
             employee.projects = kwargs.get('projects', [])
-            employee.payment_strategy = FreelancerPaymentStrategy()
-            employee.bonus_strategy = NoBonus()
-        
+            payment_strategy = FreelancerPaymentStrategy()
+            bonus_strategy = PerformanceBonusStrategy()
+
+        # Asignar estrategias
+        employee.payment_strategy = payment_strategy
+        employee.bonus_strategy = bonus_strategy
+
         # Asignar política de vacaciones según el rol
         if role == EmployeeRole.INTERN:
             employee.vacation_policy = InternVacationPolicy()
             employee.bonus_strategy = NoBonus()  # Los pasantes no reciben bonos
+
         elif role == EmployeeRole.MANAGER:
             employee.vacation_policy = ManagerVacationPolicy()
+
         elif role == EmployeeRole.VICE_PRESIDENT:
             employee.vacation_policy = VicePresidentVacationPolicy()
-        
+        elif role == EmployeeRole.DEVELOPER:
+            employee.vacation_policy = DeveloperVacationPolicy()
+
         employee.employee_type = emp_type
         return employee
 
@@ -525,7 +585,18 @@ class EmployeeManagementUI:
                 kwargs['hourly_rate'] = float(input("Hourly rate: "))
                 kwargs['hours_worked'] = int(input("Hours worked: "))
             elif emp_type == EmployeeType.FREELANCER:
-                print("Freelancer created. You can add projects later.")
+                projects = []
+                try:
+                    total = int(input("¿Cuántos proyectos deseas agregar? "))
+                    for i in range(total):
+                        print(f"\nProyecto #{i + 1}")
+                        nombre = input("Nombre del proyecto: ")
+                        monto = float(input("Monto del proyecto ($): "))
+                        projects.append({"name": nombre, "amount": monto})
+                    kwargs['projects'] = projects
+                except ValueError:
+                    print("Entrada inválida. No se agregaron proyectos.")
+                    kwargs['projects'] = []
             
             employee = EmployeeFactory.create_employee(name, role, emp_type, **kwargs)
             self.company.add_employee(employee)
