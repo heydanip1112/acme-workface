@@ -249,9 +249,10 @@ class ManagerVacationPolicy(VacationPolicy):
             else:
                 return f"No se puede procesar el payout. Días disponibles: {employee.vacation_days}"
         else:
-            if self.can_take_vacation(employee, 1):
-                employee.vacation_days -= 1
-                return f"Vacación procesada. Días restantes: {employee.vacation_days}"
+            days = days or 1
+            if self.can_take_vacation(employee, days):
+                employee.vacation_days -= days
+                return f"Vacación de {days} días procesada. Días restantes: {employee.vacation_days}"
             else:
                 return "No hay suficientes días de vacaciones disponibles."
 
@@ -276,9 +277,10 @@ class VicePresidentVacationPolicy(VacationPolicy):
             else:
                 return f"No se puede procesar el payout. Días disponibles: {employee.vacation_days}"
         else:
-            if self.can_take_vacation(employee, 1):
-                employee.vacation_days -= 1
-                return f"Vacación procesada. Días restantes: {employee.vacation_days}"
+            days = days or 1
+            if self.can_take_vacation(employee, days):
+                employee.vacation_days -= days
+                return f"Vacación de {days} días procesada. Días restantes: {employee.vacation_days}"
             else:
                 return "Máximo 5 días por solicitud para vicepresidentes."
 
@@ -660,8 +662,13 @@ class EmployeeManagementUI:
             idx = int(input("Select employee index: "))
             employee = self.company.employees[idx]
             payout = input("Payout instead of time off? (y/n): ").lower() == "y"
-            
-            result = self.company.process_vacation(employee, payout)
+            try:
+                days = int(input("¿Cuántos días desea tomar?: "))
+            except ValueError:
+                print("Número inválido. Se tomará el valor por defecto (1 día).")
+                days = None
+
+            result = self.company.process_vacation(employee, payout, days)
             print(result)
             
         except (IndexError, ValueError) as e:
