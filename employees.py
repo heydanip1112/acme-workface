@@ -1,6 +1,13 @@
 """
 Sistema de Gestión de Empleados Refactorizado
 Aplicando principios SOLID y patrones de diseño
+
+Camila Alejandra Melara Liévano 20235691 
+Daniela Rocío Pineda Pineda 20235662 
+Diego Enrique Morales Zepeda 20235780 
+Genesis Beraly Parada Ventura 20235861 
+Ximena Sarai Zelaya Salazar 20235973 
+
 """
 
 import os
@@ -14,19 +21,20 @@ from enum import Enum
 
 # ==================== ENUMS Y CONSTANTES ====================
 
+"Roles de posibles empleados"
 class EmployeeRole(Enum):
     INTERN = "intern"
     MANAGER = "manager"
     VICE_PRESIDENT = "vice_president"
     DEVELOPER = "developer"
 
-
+"Tipo de contrato de empleado"
 class EmployeeType(Enum):
     SALARIED = "salaried"
     HOURLY = "hourly"
     FREELANCER = "freelancer"
 
-
+"Tipo de transacción que se puede hacer al historial de un empleado"
 class TransactionType(Enum):
     VACATION = "vacation"
     VACATION_PAYOUT = "vacation_payout"
@@ -37,10 +45,11 @@ class TransactionType(Enum):
 # ==================== CONFIGURACIÓN (SINGLETON) ====================
 
 class ConfigLoader:
-    """Singleton para cargar configuraciones desde archivo JSON"""
+    "Singleton para cargar configuraciones desde archivo JSON"
     _instance = None
     _config = None
 
+    "Controla que haya una sola instancia de la clase"
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ConfigLoader, cls).__new__(cls)
@@ -50,8 +59,8 @@ class ConfigLoader:
         if self._config is None:
             self._load_config()
 
+    "Carga configuración desde config.json"
     def _load_config(self):
-        """Carga configuración desde config.json"""
         default_config = {
             "vacation": {
                 "default_days": 25,
@@ -82,8 +91,8 @@ class ConfigLoader:
             with open('config.json', 'w') as f:
                 json.dump(default_config, f, indent=2)
 
+    "Obtiene un valor de configuración usando notación de punto"
     def get(self, key_path: str):
-        """Obtiene un valor de configuración usando notación de punto"""
         keys = key_path.split('.')
         value = self._config
         for key in keys:
@@ -93,9 +102,9 @@ class ConfigLoader:
 
 # ==================== MODELOS DE DATOS ====================
 
+"Representa una transacción en el historial"
 @dataclass
 class Transaction:
-    """Representa una transacción en el historial"""
     employee_name: str
     transaction_type: TransactionType
     amount: float
@@ -105,36 +114,29 @@ class Transaction:
 
 # ==================== ESTRATEGIAS DE PAGO (STRATEGY PATTERN) ====================
 
+"Cálculo de pagos (abstracta)"
 class PaymentStrategy(ABC):
-    """Estrategia abstracta para cálculo de pagos"""
-    
     @abstractmethod
     def calculate_payment(self, employee: 'Employee') -> float:
         pass
 
-
+"Pago para empleados asalariados"
 class SalariedPaymentStrategy(PaymentStrategy):
-    """Estrategia de pago para empleados asalariados"""
-    
     def calculate_payment(self, employee: 'Employee') -> float:
         config = ConfigLoader()
         base_salary = getattr(employee, 'monthly_salary', 
                             config.get('payment.default_monthly_salary'))
         return base_salary
 
-
+"Pago para empleados por horas"
 class HourlyPaymentStrategy(PaymentStrategy):
-    """Estrategia de pago para empleados por horas"""
-    
     def calculate_payment(self, employee: 'Employee') -> float:
         hourly_rate = getattr(employee, 'hourly_rate', 0)
         hours = getattr(employee, 'hours_worked', 0)
         return hourly_rate * hours
 
-
+"Estrategia de pago para freelancers"
 class FreelancerPaymentStrategy(PaymentStrategy):
-    """Estrategia de pago para freelancers"""
-    
     def calculate_payment(self, employee: 'Employee') -> float:
         projects = getattr(employee, 'projects', [])
         return sum(project.get('amount', 0) for project in projects)
@@ -142,26 +144,21 @@ class FreelancerPaymentStrategy(PaymentStrategy):
 
 # ==================== ESTRATEGIAS DE BONIFICACIÓN ====================
 
+"Estrategia abstracta para cálculo de bonificaciones"
 class BonusStrategy(ABC):
-    """Estrategia abstracta para cálculo de bonificaciones"""
-    
     @abstractmethod
     def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
         pass
 
-
+"Bonificación para empleados asalariados"
 class SalariedBonusStrategy(BonusStrategy):
-    """Bonificación para empleados asalariados"""
-    
     def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
         config = ConfigLoader()
         percentage = config.get('payment.bonus.salaried_percentage')
         return base_payment * percentage
 
-
+"Bonificación para empleados por horas"
 class HourlyBonusStrategy(BonusStrategy):
-    """Bonificación para empleados por horas"""
-    
     def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
         config = ConfigLoader()
         hours = getattr(employee, 'hours_worked', 0)
@@ -170,15 +167,14 @@ class HourlyBonusStrategy(BonusStrategy):
         
         return bonus_amount if hours > threshold else 0
 
+
+"Sin bonificación (para pasantes y freelancers)"
 class NoBonus(BonusStrategy):
-    """Sin bonificación (para pasantes y freelancers)"""
-    
     def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
         return 0
-    
-class PerformanceBonusStrategy(BonusStrategy):
-    """Bonificación adicional por desempeño"""
 
+"Bonificación adicional por desempeño"
+class PerformanceBonusStrategy(BonusStrategy):
     def calculate_bonus(self, employee: 'Employee', base_payment: float) -> float:
         config = ConfigLoader()
         performance_rates = config.get('payment.bonus.performance')
@@ -188,7 +184,7 @@ class PerformanceBonusStrategy(BonusStrategy):
 
         return base_payment * performance_rate
 
-#Junta las clases "SalariedBonusStrategy", "HourlyBonusStrategy" y "PerformanceBonusStrategy" en una clase "CombinedBonusStrategy"
+"""Junta las clases, para poder dar bonos extra, "SalariedBonusStrategy", "HourlyBonusStrategy" y "PerformanceBonusStrategy" en una clase "CombinedBonusStrategy"""
 class CombinedBonusStrategy(BonusStrategy):
     def __init__(self, base_bonus: BonusStrategy, extra_bonus: BonusStrategy):
         self.base_bonus = base_bonus
@@ -200,9 +196,9 @@ class CombinedBonusStrategy(BonusStrategy):
 
 # ==================== POLÍTICAS DE VACACIONES ====================
 
+"Política abstracta para manejo de vacaciones"
 class VacationPolicy(ABC):
-    """Política abstracta para manejo de vacaciones"""
-    
+
     @abstractmethod
     def can_take_vacation(self, employee: 'Employee', days: int = 1) -> bool:
         pass
@@ -215,9 +211,7 @@ class VacationPolicy(ABC):
     def process_vacation(self, employee: 'Employee', payout: bool, days: int = None) -> str:
         pass
 
-
 class InternVacationPolicy(VacationPolicy):
-    """Política de vacaciones para pasantes"""
     
     def can_take_vacation(self, employee: 'Employee', days: int = 1) -> bool:
         return False
@@ -228,9 +222,7 @@ class InternVacationPolicy(VacationPolicy):
     def process_vacation(self, employee: 'Employee', payout: bool, days: int = None) -> str:
         return "Los pasantes no pueden solicitar vacaciones ni compensación monetaria."
 
-
 class ManagerVacationPolicy(VacationPolicy):
-    """Política de vacaciones para gerentes"""
     
     def can_take_vacation(self, employee: 'Employee', days: int = 1) -> bool:
         return employee.vacation_days >= days
@@ -249,16 +241,13 @@ class ManagerVacationPolicy(VacationPolicy):
             else:
                 return f"No se puede procesar el payout. Días disponibles: {employee.vacation_days}"
         else:
-            days = days or 1
-            if self.can_take_vacation(employee, days):
-                employee.vacation_days -= days
-                return f"Vacación de {days} días procesada. Días restantes: {employee.vacation_days}"
+            if self.can_take_vacation(employee, 1):
+                employee.vacation_days -= 1
+                return f"Vacación procesada. Días restantes: {employee.vacation_days}"
             else:
                 return "No hay suficientes días de vacaciones disponibles."
 
-
 class VicePresidentVacationPolicy(VacationPolicy):
-    """Política de vacaciones para vicepresidentes"""
     
     def can_take_vacation(self, employee: 'Employee', days: int = 1) -> bool:
         config = ConfigLoader()
@@ -277,15 +266,13 @@ class VicePresidentVacationPolicy(VacationPolicy):
             else:
                 return f"No se puede procesar el payout. Días disponibles: {employee.vacation_days}"
         else:
-            days = days or 1
-            if self.can_take_vacation(employee, days):
-                employee.vacation_days -= days
-                return f"Vacación de {days} días procesada. Días restantes: {employee.vacation_days}"
+            if self.can_take_vacation(employee, 1):
+                employee.vacation_days -= 1
+                return f"Vacación procesada. Días restantes: {employee.vacation_days}"
             else:
                 return "Máximo 5 días por solicitud para vicepresidentes."
 
 class DeveloperVacationPolicy(VacationPolicy):
-    """Política de vacaciones para desarrolladores"""
 
     def can_take_vacation(self, employee: 'Employee', days: int = 1) -> bool:
         config = ConfigLoader()
@@ -316,8 +303,8 @@ class DeveloperVacationPolicy(VacationPolicy):
 
 # ==================== FACTORY PARA EMPLEADOS ====================
 
+"Factory Method para crear empleados con sus estrategias"
 class EmployeeFactory:
-    """Factory Method para crear empleados con sus estrategias"""
 
     @staticmethod
     def create_employee(name: str, role: EmployeeRole, emp_type: EmployeeType, **kwargs) -> 'Employee':
@@ -325,10 +312,13 @@ class EmployeeFactory:
         config = ConfigLoader()
 
         # Crear empleado base
+        vac_days = 0 if role == EmployeeRole.INTERN or emp_type == EmployeeType.FREELANCER \
+            else config.get('vacation.default_days')
+
         employee = Employee(
             name=name,
             role=role,
-            vacation_days=config.get('vacation.default_days')
+            vacation_days=vac_days
         )
 
         # Asignar estrategias según el tipo
@@ -377,7 +367,7 @@ class EmployeeFactory:
 
 @dataclass
 class Employee:
-    """Empleado con estrategias inyectadas"""
+    "Empleado con estrategias inyectadas"
     name: str
     role: EmployeeRole
     vacation_days: int = 25
@@ -387,35 +377,34 @@ class Employee:
     employee_type: EmployeeType = None
     
     def calculate_payment(self) -> float:
-        """Calcula el pago base usando la estrategia asignada"""
+        "Calcula el pago base usando la estrategia asignada"
         return self.payment_strategy.calculate_payment(self)
     
     def calculate_bonus(self) -> float:
-        """Calcula la bonificación usando la estrategia asignada"""
+        "Calcula la bonificación usando la estrategia asignada"
         base_payment = self.calculate_payment()
         return self.bonus_strategy.calculate_bonus(self, base_payment)
     
     def calculate_total_payment(self) -> float:
-        """Calcula el pago total incluyendo bonificaciones"""
+        "Calcula el pago total incluyendo bonificaciones"
         return self.calculate_payment() + self.calculate_bonus()
     
     def request_vacation(self, payout: bool = False, days: int = None) -> str:
-        """Solicita vacaciones usando la política asignada"""
+        "Solicita vacaciones usando la política asignada"
         return self.vacation_policy.process_vacation(self, payout, days)
 
 
 # ==================== COMANDOS (COMMAND PATTERN) ====================
 
+"Comando abstracto"
 class Command(ABC):
-    """Comando abstracto"""
     
     @abstractmethod
     def execute(self) -> Any:
         pass
 
-
+"Comando para pagar a un empleado"
 class PayEmployeeCommand(Command):
-    """Comando para pagar a un empleado"""
     
     def __init__(self, employee: Employee, transaction_history: List[Transaction]):
         self.employee = employee
@@ -446,9 +435,8 @@ class PayEmployeeCommand(Command):
         
         return f"Pagando a {self.employee.name}: ${total_payment:.2f} (incluye bonificación: ${bonus:.2f})"
 
-
+"Comando para procesar vacaciones"
 class VacationCommand(Command):
-    """Comando para procesar vacaciones"""
     
     def __init__(self, employee: Employee, payout: bool, transaction_history: List[Transaction], days: int = None):
         self.employee = employee
@@ -477,8 +465,8 @@ class VacationCommand(Command):
 
 # ==================== DECORADOR PARA LOGGING ====================
 
+"Decorador para agregar logging a operaciones"
 class LoggingDecorator:
-    """Decorador para agregar logging a operaciones"""
     
     def __init__(self, command: Command):
         self.command = command
@@ -492,69 +480,67 @@ class LoggingDecorator:
 
 # ==================== COMPANY REFACTORIZADA ====================
 
+"Compañía con arquitectura mejorada"
 class Company:
-    """Compañía con arquitectura mejorada"""
     
     def __init__(self):
         self.employees: List[Employee] = []
         self.transaction_history: List[Transaction] = []
     
     def add_employee(self, employee: Employee) -> None:
-        """Agrega un empleado a la compañía"""
+        "Agrega un empleado a la compañía"
         self.employees.append(employee)
     
     def find_employees_by_role(self, role: EmployeeRole) -> List[Employee]:
-        """Encuentra empleados por rol (método genérico)"""
+        "Encuentra empleados por rol (método genérico)"
         return [emp for emp in self.employees if emp.role == role]
     
     def find_managers(self) -> List[Employee]:
-        """Encuentra gerentes"""
+        "Encuentra gerentes"
         return self.find_employees_by_role(EmployeeRole.MANAGER)
     
     def find_interns(self) -> List[Employee]:
-        """Encuentra pasantes"""
+        "Encuentra pasantes"
         return self.find_employees_by_role(EmployeeRole.INTERN)
     
     def find_vice_presidents(self) -> List[Employee]:
-        """Encuentra vicepresidentes"""
+        "Encuentra vicepresidentes"
         return self.find_employees_by_role(EmployeeRole.VICE_PRESIDENT)
     
     def pay_employee(self, employee: Employee) -> str:
-        """Paga a un empleado usando Command pattern"""
+        "Paga a un empleado usando Command pattern"
         command = PayEmployeeCommand(employee, self.transaction_history)
         logged_command = LoggingDecorator(command)
         return logged_command.execute()
     
     def pay_all_employees(self) -> None:
-        """Paga a todos los empleados"""
+        "Paga a todos los empleados"
         for employee in self.employees:
             self.pay_employee(employee)
     
     def process_vacation(self, employee: Employee, payout: bool = False, days: int = None) -> str:
-        """Procesa vacaciones usando Command pattern"""
+        "Procesa vacaciones"
         command = VacationCommand(employee, payout, self.transaction_history, days)
         logged_command = LoggingDecorator(command)
         return logged_command.execute()
     
     def get_employee_history(self, employee_name: str) -> List[Transaction]:
-        """Obtiene el historial de transacciones de un empleado"""
+        "Obtiene el historial de transacciones de un empleado"
         return [t for t in self.transaction_history if t.employee_name == employee_name]
 
 
 # ==================== INTERFAZ DE USUARIO ====================
 
+"Interfaz de usuario separada de la lógica de negocio"
 class EmployeeManagementUI:
-    """Interfaz de usuario separada de la lógica de negocio"""
     
     def __init__(self):
         self.company = Company()
     
     def clear_screen(self):
-        """Limpia la pantalla"""
         os.system('cls' if os.name == 'nt' else 'clear')
     
     def display_main_menu(self):
-        """Muestra el menú principal"""
         print("--- Employee Management Menu ---")
         print("1. Create employee")
         print("2. View employees")
@@ -564,7 +550,6 @@ class EmployeeManagementUI:
         print("6. Exit")
     
     def create_employee_menu(self):
-        """Menú para crear empleados"""
         try:
             name = input("Employee name: ")
             
@@ -608,7 +593,6 @@ class EmployeeManagementUI:
             print(f"Error creating employee: {e}")
     
     def view_employees_menu(self):
-        """Menú para ver empleados"""
         while True:
             self.clear_screen()
             print("--- View Employees Submenu ---")
@@ -639,7 +623,6 @@ class EmployeeManagementUI:
             input("Press Enter to continue...")
     
     def _display_employees(self, employees: List[Employee], title: str):
-        """Muestra lista de empleados"""
         print(f"\n--- {title} ---")
         if not employees:
             print("No employees found.")
@@ -649,7 +632,6 @@ class EmployeeManagementUI:
             print(f"{emp.name} ({emp.role.value}, {emp.employee_type.value}) - {emp.vacation_days} vacation days")
     
     def vacation_menu(self):
-        """Menú para otorgar vacaciones"""
         if not self.company.employees:
             print("No employees available.")
             return
@@ -662,11 +644,9 @@ class EmployeeManagementUI:
             idx = int(input("Select employee index: "))
             employee = self.company.employees[idx]
             payout = input("Payout instead of time off? (y/n): ").lower() == "y"
-            try:
-                days = int(input("¿Cuántos días desea tomar?: "))
-            except ValueError:
-                print("Número inválido. Se tomará el valor por defecto (1 día).")
-                days = None
+
+            days_input = input("How many days? (leave empty for default): ")
+            days = int(days_input) if days_input.strip() else None
 
             result = self.company.process_vacation(employee, payout, days)
             print(result)
@@ -675,7 +655,6 @@ class EmployeeManagementUI:
             print(f"Error: {e}")
     
     def pay_employees_menu(self):
-        """Menú para pagar empleados"""
         if not self.company.employees:
             print("No employees available.")
             return
@@ -684,7 +663,6 @@ class EmployeeManagementUI:
         self.company.pay_all_employees()
     
     def employee_history_menu(self):
-        """Menú para ver historial de empleados"""
         if not self.company.employees:
             print("No employees available.")
             return
@@ -711,7 +689,6 @@ class EmployeeManagementUI:
             print(f"Error: {e}")
     
     def run(self):
-        """Ejecuta la aplicación"""
         while True:
             self.clear_screen()
             self.display_main_menu()
@@ -741,7 +718,7 @@ class EmployeeManagementUI:
 # ==================== PUNTO DE ENTRADA ====================
 
 def main():
-    """Función principal"""
+    "Función principal"
     app = EmployeeManagementUI()
     app.run()
 
